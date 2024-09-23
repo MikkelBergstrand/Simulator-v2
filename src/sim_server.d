@@ -254,13 +254,11 @@ final class SimulationState {
                 departDirn = dice(50, 50) ? Dirn.Up : Dirn.Down;
             }
             currDirn = Dirn.Stop;
-            writeln("Homie");
         } else {
             currDirn    = Dirn.Stop;
             currFloor   = clamp(cfg.startFloor, 0, numFloors-1);
             departDirn  = Dirn.Up;
             prevFloor   = clamp(cfg.startFloor, 0, numFloors-1);
-            writeln(prevFloor);
         }
         resetBg;
     }
