@@ -6,6 +6,7 @@ simulator.con
 --stopMotorOnDisconnect         true
 
 --numFloors             4           // Minimum: 2, maximum: 9
+--startFloor            1
 
 --port                  15657
 

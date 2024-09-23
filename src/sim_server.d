@@ -25,6 +25,8 @@ struct SimConfig {
     ushort      port                    = 15657;
     
     int         numFloors               = 4;
+    int         startFloor              = 0;
+    bool        randomStart             = false; //If true, startFloor is ignored
     
     Duration    travelTimeBetweenFloors = 2.seconds;
     Duration    travelTimePassingFloor  = 500.msecs;
@@ -66,6 +68,8 @@ SimConfig parseConfig(string[] contents, SimConfig old = SimConfig.init){
         std.getopt.config.passThrough,
         "port",                         &cfg.port,
         "numFloors",                    &cfg.numFloors,
+        "startFloor",                   &cfg.startFloor,
+        "randomStart",                  &cfg.randomStart,
         "travelTimeBetweenFloors_ms",   &travelTimeBetweenFloors_ms,
         "travelTimePassingFloor_ms",    &travelTimePassingFloor_ms,
         "btnDepressedTime_ms",          &btnDepressedTime_ms,
@@ -231,7 +235,7 @@ enum BtnType {
 }
 
 final class SimulationState {
-    this(Flag!"randomStart" randomStart, int numFloors){
+    this(int numFloors){
         assert(2 <= numFloors  &&  numFloors <= 9);
         this.numFloors  = numFloors;
         orderButtons    = new bool[3][](numFloors);
@@ -239,7 +243,7 @@ final class SimulationState {
         
         bg = new char[][](8, 27 + 4*numFloors);
 
-        if(randomStart){
+        if(cfg.randomStart){
             prevFloor = uniform(0, numFloors);
             currFloor = dice(50, 50) ? -1 : prevFloor;
             if(currFloor == -1  &&  prevFloor == 0){
@@ -250,17 +254,19 @@ final class SimulationState {
                 departDirn = dice(50, 50) ? Dirn.Up : Dirn.Down;
             }
             currDirn = Dirn.Stop;
+            writeln("Homie");
         } else {
             currDirn    = Dirn.Stop;
-            currFloor   = 0;
+            currFloor   = clamp(cfg.startFloor, 0, numFloors-1);
             departDirn  = Dirn.Up;
-            prevFloor   = 0;
+            prevFloor   = clamp(cfg.startFloor, 0, numFloors-1);
+            writeln(prevFloor);
         }
         resetBg;
     }
 
-    this(Flag!"randomStart" randomStart){
-        this(randomStart, 4);
+    this(){
+        this(4);
     }
 
     immutable int numFloors;
@@ -451,7 +457,7 @@ void main(string[] args){
 
     cfg = loadConfig(args, "simulator.con");
 
-    auto state = new SimulationState(Yes.randomStart, cfg.numFloors);
+    auto state = new SimulationState(cfg.numFloors);
     writeln('\n'.repeat(state.bg.length.to!int+1));
     ConsolePoint cp = cursorPos;
     cp.y = max(0, cp.y-(state.bg.length.to!int+1));
@@ -487,7 +493,7 @@ void main(string[] args){
             (ReloadConfig r){
                 cfg = loadConfig(args, "simulator.con", cfg);
                 auto prevPrintCount = state.printCount;
-                state = new SimulationState(Yes.randomStart, cfg.numFloors);
+                state = new SimulationState(cfg.numFloors);
                 state.printCount = prevPrintCount;
                 state.clientConnected = true;
             },
