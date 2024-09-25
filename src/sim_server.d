@@ -834,7 +834,6 @@ void networkInterfaceProc(Tid receiver, ushort port){
                 case 5:
                     receiver.send(StopButtonLight(buf[1].to!bool));
                     break;
-
                 case 6:
                     receiver.send(thisTid, OrderButtonRequest(buf[2].to!int, cast(BtnType)buf[1]));
                     receive((bool v){
@@ -862,6 +861,14 @@ void networkInterfaceProc(Tid receiver, ushort port){
                         buf[1..$] = [v.to!ubyte, 0, 0];
                         sock.send(buf);
                     });
+                    break;
+                case 10:
+                    receiver.send(OrderButton(buf[2].to!int, cast(BtnType)buf[1], BtnAction.Press));
+                    addEvent(
+                        receiver, 
+                        cfg.btnDepressedTime, 
+                        OrderButton(buf[2].to!int, cast(BtnType)buf[1], BtnAction.Release)
+                    );
                     break;
                 default:
                     break;
