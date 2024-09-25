@@ -23,6 +23,7 @@ import timer_event;
 
 struct SimConfig {
     ushort      port                    = 15657;
+    ushort      externalPort            = 0;
     
     int         numFloors               = 4;
     int         startFloor              = 0;
@@ -67,6 +68,7 @@ SimConfig parseConfig(string[] contents, SimConfig old = SimConfig.init){
     getopt( contents,
         std.getopt.config.passThrough,
         "port",                         &cfg.port,
+        "externalPort",                 &cfg.externalPort,
         "numFloors",                    &cfg.numFloors,
         "startFloor",                   &cfg.startFloor,
         "randomStart",                  &cfg.randomStart,
@@ -469,7 +471,13 @@ void main(string[] args){
 
     auto stdinParseTid          = spawnLinked(&stdinParseProc, thisTid);
     auto stdinGetterTid         = spawnLinked(&stdinGetterProc, stdinParseTid);
-    auto networkInterfaceTid    = spawnLinked(&networkInterfaceProc, thisTid);
+    auto networkInterfaceTid    = spawnLinked(&networkInterfaceProc, thisTid, cfg.port.to!ushort);
+    auto extNetworkInteraceTid  = null; 
+    
+    if(cfg.externalPort != 0) {
+        writeln("External port configured. \nCommands may also be recieved/sent on port " ~ to!string(cfg.externalPort));
+        spawnLinked(&networkInterfaceProc, thisTid, cfg.externalPort.to!ushort);
+    }
     
     
     import core.thread : Thread;
@@ -776,13 +784,17 @@ void stdinParseProc(Tid receiver){
 }
 
 
-void networkInterfaceProc(Tid receiver){
+void networkInterfaceProc(Tid receiver, ushort port){
+    if(port == 0) {
+        return;
+    }
+
     try {
     
     Socket acceptSock = new TcpSocket();
 
     acceptSock.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, 1);
-    acceptSock.bind(new InternetAddress(cfg.port.to!ushort));
+    acceptSock.bind(new InternetAddress(port));
     acceptSock.listen(1);
 
     ubyte[4] buf;
