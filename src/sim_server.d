@@ -196,6 +196,10 @@ struct StopButtonRequest {}
 
 struct ObstructionRequest {}
 
+struct FloorLampRequest {}
+
+struct DoorStateRequest {}
+
 
 /// --- MOVEMENT --- ///
 
@@ -585,9 +589,14 @@ void main(string[] args){
                 stateUpdated = false;
                 receiver.send(state.obstruction);
             },
-
-
-
+            (Tid reciever, FloorLampRequest req) {
+                stateUpdated = false;
+                reciever.send(state.floorIndicator);
+            },
+            (Tid reciever, DoorStateRequest req) {
+                stateUpdated = false; 
+                reciever.send(state.doorLight);
+            },
 
             /// --- PANEL INPUTS --- ///
 
@@ -869,6 +878,20 @@ void networkInterfaceProc(Tid receiver, ushort port){
                         cfg.btnDepressedTime, 
                         OrderButton(buf[2].to!int, cast(BtnType)buf[1], BtnAction.Release)
                     );
+                    break;
+                case 11:
+                    receiver.send(thisTid, FloorLampRequest());
+                    receive((int f){
+                        buf[1..$] = (f == -1) ? [0, 0, 0] : [1, cast(ubyte)f, 0];
+                        sock.send(buf);
+                    });
+                    break;
+                case 12:
+                    receiver.send(thisTid, DoorStateRequest());
+                    receive((bool v){
+                        buf[1..$] = [v.to!ubyte, 0, 0];
+                        sock.send(buf);
+                    });
                     break;
                 default:
                     break;
