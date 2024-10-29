@@ -200,6 +200,11 @@ struct FloorLampRequest {}
 
 struct DoorStateRequest {}
 
+struct OrderLampRequest {
+  int floor;
+  BtnType btnType;
+}
+
 
 /// --- MOVEMENT --- ///
 
@@ -597,6 +602,20 @@ void main(string[] args){
                 stateUpdated = false; 
                 reciever.send(state.doorLight);
             },
+            (Tid receiver, OrderLampRequest req) {
+                stateUpdated = false;
+                assert(0 <= req.floor  &&  req.floor < state.numFloors,
+                    "Tried to read order button at non-existent floor " ~ req.floor.to!string);
+                assert(0 <= req.btnType  &&  req.btnType <= BtnType.max,
+                    "Tried to read order button for invalid button type " ~ req.btnType.to!int.to!string);
+                if( (req.btnType == BtnType.Up && req.floor == state.numFloors-1) ||
+                    (req.btnType == BtnType.Down && req.floor == 0)
+                ){
+                    receiver.send(false);
+                } else {
+                    receiver.send(state.orderLights[req.floor][req.btnType]);
+                }
+            },
 
             /// --- PANEL INPUTS --- ///
 
@@ -888,6 +907,13 @@ void networkInterfaceProc(Tid receiver, ushort port){
                     break;
                 case 12:
                     receiver.send(thisTid, DoorStateRequest());
+                    receive((bool v){
+                        buf[1..$] = [v.to!ubyte, 0, 0];
+                        sock.send(buf);
+                    });
+                    break;
+                case 13:
+                    receiver.send(thisTid, OrderLampRequest(buf[2].to!int, cast(BtnType)buf[1]));
                     receive((bool v){
                         buf[1..$] = [v.to!ubyte, 0, 0];
                         sock.send(buf);
