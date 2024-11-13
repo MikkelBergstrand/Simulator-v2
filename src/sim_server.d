@@ -200,6 +200,8 @@ struct FloorLampRequest {}
 
 struct DoorStateRequest {}
 
+struct OutOfBoundsRequest {}
+
 struct OrderLampRequest {
   int floor;
   BtnType btnType;
@@ -567,7 +569,9 @@ void main(string[] args){
 
 
             /// --- READ --- ///
-
+            (Tid receiver, OutOfBoundsRequest req) {
+                receiver.send(state.isOutOfBounds);
+            },
             (Tid receiver, OrderButtonRequest req){
                 stateUpdated = false;
                 assert(0 <= req.floor  &&  req.floor < state.numFloors,
@@ -915,6 +919,13 @@ void networkInterfaceProc(Tid receiver, ushort port){
                 case 13:
                     receiver.send(thisTid, OrderLampRequest(buf[2].to!int, cast(BtnType)buf[1]));
                     receive((bool v){
+                        buf[1..$] = [v.to!ubyte, 0, 0];
+                        sock.send(buf);
+                    });
+                    break;
+                case 14:
+                    receiver.send(thisTid, OutOfBoundsRequest());
+                    receive((bool v) {
                         buf[1..$] = [v.to!ubyte, 0, 0];
                         sock.send(buf);
                     });
