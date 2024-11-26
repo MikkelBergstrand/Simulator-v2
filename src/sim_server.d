@@ -487,7 +487,7 @@ void main(string[] args){
     
     if(cfg.externalPort != 0) {
         writeln("External port configured. \nCommands may also be recieved/sent on port " ~ to!string(cfg.externalPort));
-        spawnLinked(&networkInterfaceProc, thisTid, cfg.externalPort.to!ushort);
+        spawnLinked(&externalNetworkInterfaceProc, thisTid, cfg.externalPort.to!ushort);
     }
     
     
@@ -815,8 +815,7 @@ void stdinParseProc(Tid receiver){
     }
 }
 
-
-void networkInterfaceProc(Tid receiver, ushort port){
+void externalNetworkInterfaceProc(Tid receiver, ushort port){
     if(port == 0) {
         return;
     }
@@ -926,6 +925,98 @@ void networkInterfaceProc(Tid receiver, ushort port){
                 case 14:
                     receiver.send(thisTid, OutOfBoundsRequest());
                     receive((bool v) {
+                        buf[1..$] = [v.to!ubyte, 0, 0];
+                        sock.send(buf);
+                    });
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+    }
+    
+    } catch(Throwable t){
+        writeln(typeid(t).name, "@", t.file, "(", t.line, "): ", t.msg);
+    }
+}
+
+
+
+void networkInterfaceProc(Tid receiver, ushort port){
+    if(port == 0) {
+        return;
+    }
+
+    try {
+    
+    Socket acceptSock = new TcpSocket();
+
+    acceptSock.setOption(SocketOptionLevel.SOCKET, SocketOption.REUSEADDR, 1);
+    acceptSock.bind(new InternetAddress(port));
+    acceptSock.listen(1);
+
+    ubyte[4] buf;
+
+    while(true){
+        auto sock = acceptSock.accept();
+        receiver.send(ClientConnected(true));
+        while(sock.isAlive){
+            buf = 0;
+            auto n = sock.receive(buf);
+
+            if(n <= 0){
+                receiver.send(ClientConnected(false));
+                sock.shutdown(SocketShutdown.BOTH);
+                sock.close();
+            } else {
+                switch(buf[0]){
+                case 0:
+                    receiver.send(ReloadConfig());
+                    break;
+                case 1:
+                    receiver.send(MotorDirection(
+                        (buf[1] == 0)   ? Dirn.Stop :
+                        (buf[1] < 128)  ? Dirn.Up   :
+                                          Dirn.Down
+                    ));
+                    break;
+                case 2:
+                    receiver.send(OrderButtonLight(buf[2].to!int, cast(BtnType)buf[1], buf[3].to!bool));
+                    break;
+                case 3:
+                    receiver.send(FloorIndicator(buf[1].to!int));
+                    break;
+                case 4:
+                    receiver.send(DoorLight(buf[1].to!bool));
+                    break;
+                case 5:
+                    receiver.send(StopButtonLight(buf[1].to!bool));
+                    break;
+                case 6:
+                    receiver.send(thisTid, OrderButtonRequest(buf[2].to!int, cast(BtnType)buf[1]));
+                    receive((bool v){
+                        buf[1..$] = [v.to!ubyte, 0, 0];
+                        sock.send(buf);
+                    });
+                    break;
+                case 7:
+                    receiver.send(thisTid, FloorSensorRequest());
+                    receive((int f){
+                        buf[1..$] = (f == -1) ? [0, 0, 0] : [1, cast(ubyte)f, 0];
+                        sock.send(buf);
+                    });
+                    break;
+                case 8:
+                    receiver.send(thisTid, StopButtonRequest());
+                    receive((bool v){
+                        buf[1..$] = [v.to!ubyte, 0, 0];
+                        sock.send(buf);
+                    });
+                    break;
+                case 9:
+                    receiver.send(thisTid, ObstructionRequest());
+                    receive((bool v){
                         buf[1..$] = [v.to!ubyte, 0, 0];
                         sock.send(buf);
                     });
