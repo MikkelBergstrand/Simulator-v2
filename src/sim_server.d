@@ -34,6 +34,8 @@ struct SimConfig {
     Duration    btnDepressedTime        = 200.msecs;
     bool        stopMotorOnDisconnect   = true;
 
+    char        engine_fail           = '1';
+    char        engine_work           = '2';
     char        light_off               = '-';
     char        light_on                = '*';    
 
@@ -154,6 +156,11 @@ struct ObstructionSwitch {}
 /// --- INTERFACE --- ///
 
 // -- Write -- //
+
+struct EngineFailureState {
+  bool value;
+  alias value this;
+}
 
 struct MotorDirection {
     Dirn dirn;
@@ -289,6 +296,7 @@ final class SimulationState {
     bool        obstruction;
     bool        doorLight;
     int         floorIndicator;
+    bool        engineFailure;
 
     Dirn        currDirn;
     int         currFloor;      // 0..numFloors, or -1 when between floors
@@ -319,6 +327,7 @@ final class SimulationState {
         obstruction     = false;
         doorLight       = false;
         floorIndicator  = 0;
+        engineFailure   = false;
     }
 
     void resetBg(){
@@ -521,7 +530,8 @@ void main(string[] args){
             (MotorDirection md){
                 assert(Dirn.min <= md &&  md <= Dirn.max,
                     "Tried to set motor direction to invalid direction " ~ md.to!int.to!string);
-                if(state.currDirn != md  &&  !state.isOutOfBounds){
+                
+                if(!state.engineFailure && state.currDirn != md  &&  !state.isOutOfBounds){
                     state.currDirn = md;
 
                     if(state.currFloor == -1){
@@ -565,6 +575,37 @@ void main(string[] args){
             },
             (StopButtonLight sbl){
                 state.stopButtonLight = sbl;
+            },
+            (EngineFailureState efs){
+              state.engineFailure = efs;
+              if (efs) {
+                thisTid.send(MotorDirection(Dirn.Stop));
+              } else {
+                thisTid.send(MotorDirection(state.currDirn));
+
+                if(state.currFloor == -1){
+                    deleteEvent(thisTid, typeid(FloorArrival), Delete.all);
+                } else {
+                    deleteEvent(thisTid, typeid(FloorDeparture), Delete.all);
+                }
+
+                if(state.currDirn != Dirn.Stop){
+                    if(state.currFloor != -1){
+                        // At a floor: depart this floor
+                        addEvent(thisTid, cfg.travelTimePassingFloor, FloorDeparture(state.currFloor));
+                        state.departDirn = state.currDirn;
+                    } else {
+                        // Between floors
+                        if(state.departDirn == state.currDirn){
+                            // Continue in that direction
+                            addEvent(thisTid, cfg.travelTimeBetweenFloors, FloorArrival(state.prevFloor + state.currDirn));
+                        } else {
+                            // Go back to previous floor
+                            addEvent(thisTid, cfg.travelTimeBetweenFloors, FloorArrival(state.prevFloor));
+                        }
+                    }
+                }
+              }
             },
 
 
@@ -670,10 +711,11 @@ void main(string[] args){
                 assert(abs(f - state.prevFloor) <= 1,
                     "Elevator skipped a floor");
 
-
-                state.currFloor = f;
-                state.prevFloor = f;
-                addEvent(thisTid, cfg.travelTimePassingFloor, FloorDeparture(state.currFloor));
+                if(!state.engineFailure) {
+                  state.currFloor = f;
+                  state.prevFloor = f;
+                  addEvent(thisTid, cfg.travelTimePassingFloor, FloorDeparture(state.currFloor));
+                }
             },
             (FloorDeparture f){
                 if(state.currDirn == Dirn.Down && f <= 0){
@@ -804,6 +846,12 @@ void stdinParseProc(Tid receiver){
                 if(c == cfg.key_moveDown){
                     receiver.send(MotorDirection(Dirn.Down));
                 }
+                if (c == cfg.engine_fail) {
+                  receiver.send(EngineFailureState(false));
+                }
+                if (c == cfg.engine_work) {
+                  receiver.send(EngineFailureState(true));
+                }
                 if(c == cfg.key_moveInbounds){
                     receiver.send(ManualMoveWithinBounds());
                 }
@@ -929,6 +977,9 @@ void externalNetworkInterfaceProc(Tid receiver, ushort port){
                         sock.send(buf);
                     });
                     break;
+                case 15:
+                  receiver.send(thisTid, EngineFailureState(buf[1].to!bool));
+                  break;
                 default:
                     break;
                 }
