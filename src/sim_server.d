@@ -197,6 +197,8 @@ struct OrderButtonRequest {
     BtnType btnType;
 }
 
+struct MotorDirectionRequest {}
+
 struct FloorSensorRequest {}
 
 struct StopButtonRequest {}
@@ -610,6 +612,9 @@ void main(string[] args){
 
 
             /// --- READ --- ///
+            (Tid receiver, MotorDirectionRequest req) {
+                receiver.send(state.currDirn);
+            },
             (Tid receiver, OutOfBoundsRequest req) {
                 receiver.send(state.isOutOfBounds);
             },
@@ -978,7 +983,14 @@ void externalNetworkInterfaceProc(Tid receiver, ushort port){
                     });
                     break;
                 case 15:
-                  receiver.send(thisTid, EngineFailureState(buf[1].to!bool));
+                  receiver.send(EngineFailureState(buf[1].to!bool));
+                  break;
+                case 16:
+                  receiver.send(thisTid, MotorDirectionRequest());
+                  receive((Dirn v) {
+                      buf[1..$] = [(v+1).to!ubyte, 0, 0];
+                      sock.send(buf);
+                  });
                   break;
                 default:
                     break;
