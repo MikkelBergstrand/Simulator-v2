@@ -162,6 +162,11 @@ struct EngineFailureState {
   alias value this;
 }
 
+struct Obstruction {
+  bool value;
+  alias value this;
+}
+
 struct MotorDirection {
     Dirn dirn;
     alias dirn this;
@@ -578,6 +583,9 @@ void main(string[] args){
             (StopButtonLight sbl){
                 state.stopButtonLight = sbl;
             },
+            (Obstruction obs){
+                state.obstruction = obs;
+            },
             (EngineFailureState efs){
               state.engineFailure = efs;
               if (efs) {
@@ -991,6 +999,9 @@ void externalNetworkInterfaceProc(Tid receiver, ushort port){
                       buf[1..$] = [(v+1).to!ubyte, 0, 0];
                       sock.send(buf);
                   });
+                  break;
+                case 17:
+                  receiver.send(Obstruction(buf[1].to!bool));
                   break;
                 default:
                     break;
